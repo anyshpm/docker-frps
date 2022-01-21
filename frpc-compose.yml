@@ -1,0 +1,13 @@
+version: '3.3'
+services:
+  c23786de2b4b:
+    container_name: frpc
+    restart: always
+    network_mode: host
+    volumes:
+      - '/path/to/frpc.ini:/etc/frp/frpc.ini'
+    image: anyshpm/frpc
+networks:
+  default:
+    external:
+      name: "host"

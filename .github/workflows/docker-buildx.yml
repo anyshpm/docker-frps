@@ -1,8 +1,8 @@
 name: Publish Docker Image
 
 env:
-  FRP_VERSION: 0.41.0
-  TAG: 0.41.0
+  FRP_VERSION: 0.44.0
+  TAG: 0.44.0
 
 on:
   push:

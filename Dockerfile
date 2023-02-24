@@ -6,11 +6,13 @@ ARG TARGETARCH
 
 ARG FRP_VERSION
 
-ENV FRP_VERSION=${FRP_VERSION:-0.41.0}
+ENV FRP_VERSION=${FRP_VERSION:-0.47.0}
 
 ENV TARGETARCH=${TARGETARCH:-amd64}
 
 WORKDIR /
+
+#COPY frp_${FRP_VERSION}_linux_${TARGETARCH}.tar.gz /
 
 RUN set -x && \
     wget --no-check-certificate -c https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_${TARGETARCH}.tar.gz &&  \

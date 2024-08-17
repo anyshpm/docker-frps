@@ -6,7 +6,7 @@ services:
     network_mode: host
     volumes:
       - '/path/to/frps.ini:/etc/frp/frps.ini'
-    image: anyshpm/frps
+    image: anyshpm/frps:latest
 networks:
   default:
     external:

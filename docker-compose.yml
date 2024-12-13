@@ -7,7 +7,7 @@ services:
     volumes:
       - '/path/to/frps.toml:/etc/frp/frps.toml'
     image: anyshpm/frps:latest
-    command: frp -c /etc/frp/frps.toml
+    command: frps -c /etc/frp/frps.toml
 
 networks:
   default:

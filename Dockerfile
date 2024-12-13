@@ -22,5 +22,3 @@ RUN set -x && \
     cp frp_${FRP_VERSION}_linux_${TARGETARCH}/*.toml  /etc/frp &&  \
     rm frp_${FRP_VERSION}_linux_${TARGETARCH}.tar.gz &&  \
     rm -rf frp_${FRP_VERSION}_linux_${TARGETARCH}
-
-CMD /usr/bin/frps -c /etc/frp/frps.ini

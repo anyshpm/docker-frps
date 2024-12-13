@@ -5,8 +5,10 @@ services:
     restart: always
     network_mode: host
     volumes:
-      - '/path/to/frps.ini:/etc/frp/frps.ini'
+      - '/path/to/frps.toml:/etc/frp/frps.toml'
     image: anyshpm/frps:latest
+    command: frp -c /etc/frp/frps.toml
+
 networks:
   default:
     external:

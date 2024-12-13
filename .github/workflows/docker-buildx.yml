@@ -1,37 +1,81 @@
-name: Publish Docker Image
-
-env:
-  FRP_VERSION: 0.60.0
-  TAG: 0.60.0
+name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "*" ]
+    # Publish semver tags as releases.
+    tags: [ '*' ]
   pull_request:
-    branches: [ main ]
+    #branches: [ "main" ]
+    branches: [ "*" ]
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: docker.io
+  # github.repository as <account>/<repo>
+  #IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: anyshpm/frps
 
 jobs:
   build:
+
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+
     steps:
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v1
-      with:
-        platforms: all
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Docker Buildx
-      id: buildx
-      uses: docker/setup-buildx-action@v1
-      with:
-        version: latest
-    
-    - uses: actions/checkout@v2
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        #uses: sigstore/cosign-installer@f3c664df7af409cb4873aa5068053ba9d61a57b6 #v2.6.0
+        uses: sigstore/cosign-installer@v3.4.0
+        with:
+          cosign-release: 'v2.2.3'
 
-    #- name: Available platforms
-    #  run: echo ${{ steps.buildx.outputs.platforms }}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
 
-    - name: Login to Docker Registry
-      run: echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v2
 
-    - name: Build Docker Image
-      run: docker buildx build --build-arg FRP_VERSION=$FRP_VERSION -t anyshpm/frps:$TAG --platform linux/amd64,linux/arm64,linux/arm  --push .
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=edge,branch=main,priority=900
+            type=ref,event=tag,priority=800
+            type=ref,event=branch,suffix=-beta,priority=700            
+
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sign the published Docker image
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: echo "${{ steps.meta.outputs.tags }}" | xargs -I {} cosign sign --yes {}@${{ steps.build-and-push.outputs.digest }}

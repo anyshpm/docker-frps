@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [ "*" ]
+    # Only main publishes images; other branches are validated via PR builds.
+    branches: [ main ]
     # Publish semver tags as releases.
     tags: [ '*' ]
   pull_request:
@@ -79,7 +80,6 @@ jobs:
             type=raw,value=v${{ steps.frpver.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }},priority=950
             type=edge,branch=main,priority=900
             type=ref,event=tag,priority=800
-            type=ref,event=branch,suffix=-beta,priority=700
 
       - name: Build and push Docker image
         id: build-and-push

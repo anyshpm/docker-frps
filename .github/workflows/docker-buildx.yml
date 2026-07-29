@@ -35,7 +35,9 @@ jobs:
       - name: Install cosign
         if: github.event_name != 'pull_request'
         #uses: sigstore/cosign-installer@f3c664df7af409cb4873aa5068053ba9d61a57b6 #v2.6.0
-        uses: sigstore/cosign-installer@v4
+        # No floating v4 tag exists upstream; pin the exact release.
+        # (cosign-installer is a composite action, so no Node runtime concerns.)
+        uses: sigstore/cosign-installer@v4.1.2
         with:
           cosign-release: 'v2.2.3'
 

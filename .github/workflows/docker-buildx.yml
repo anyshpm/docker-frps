@@ -21,7 +21,7 @@ jobs:
 
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
       # This is used to complete the identity challenge
       # with sigstore/fulcio when running outside of PRs.
@@ -52,15 +52,34 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Extract frp version from Dockerfile
+        id: frpver
+        run: echo "version=$(grep -oP 'FRP_VERSION:-\K[0-9.]+' Dockerfile)" >> "$GITHUB_OUTPUT"
+
+      - name: Build smoke-test image (local amd64)
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: frps-smoke:test
+          cache-from: type=gha
+
+      - name: Smoke test frps
+        run: |
+          docker run --rm frps-smoke:test frps --version
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }},priority=1000
+            type=raw,value=v${{ steps.frpver.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }},priority=950
             type=edge,branch=main,priority=900
             type=ref,event=tag,priority=800
-            type=ref,event=branch,suffix=-beta,priority=700            
+            type=ref,event=branch,suffix=-beta,priority=700
 
       - name: Build and push Docker image
         id: build-and-push
@@ -79,3 +98,19 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "true"
         run: echo "${{ steps.meta.outputs.tags }}" | xargs -I {} cosign sign --yes {}@${{ steps.build-and-push.outputs.digest }}
+
+      # Tag created with the built-in token does not re-trigger this workflow,
+      # so there is no recursive build loop.
+      - name: Create git tag for released version
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TAG="v${{ steps.frpver.outputs.version }}"
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+            echo "Tag ${TAG} already exists on remote, skipping"
+          else
+            git tag "${TAG}"
+            git push origin "${TAG}"
+            echo "Created and pushed ${TAG}"
+          fi

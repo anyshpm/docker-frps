@@ -1,0 +1,65 @@
+name: Auto Update FRP
+
+on:
+  schedule:
+    # Every 6 hours, offset from the top of the hour to reduce GitHub scheduler latency
+    - cron: '17 */6 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve latest and current frp versions
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST=$(gh release view --repo fatedier/frp --json tagName -q .tagName | sed 's/^v//')
+          CURRENT=$(grep -oP 'FRP_VERSION:-\K[0-9.]+' Dockerfile)
+          echo "latest=${LATEST}" >> "$GITHUB_OUTPUT"
+          echo "current=${CURRENT}" >> "$GITHUB_OUTPUT"
+          echo "Latest frp version: ${LATEST}, current in Dockerfile: ${CURRENT}"
+
+      - name: Bump FRP_VERSION in Dockerfile
+        if: steps.ver.outputs.latest != steps.ver.outputs.current
+        run: |
+          sed -i "s/FRP_VERSION:-${{ steps.ver.outputs.current }}/FRP_VERSION:-${{ steps.ver.outputs.latest }}/" Dockerfile
+          grep FRP_VERSION Dockerfile
+
+      # PR_BOT_TOKEN (a PAT) lets the created PR trigger CI automatically.
+      # Falls back to GITHUB_TOKEN when the secret is not configured.
+      - name: Create Pull Request
+        id: cpr
+        if: steps.ver.outputs.latest != steps.ver.outputs.current
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.PR_BOT_TOKEN || github.token }}
+          commit-message: "chore: update frp to v${{ steps.ver.outputs.latest }}"
+          branch: update-frp-${{ steps.ver.outputs.latest }}
+          delete-branch: true
+          title: "chore: update frp to v${{ steps.ver.outputs.latest }}"
+          body: |
+            Automated dependency update.
+
+            - Current version: `v${{ steps.ver.outputs.current }}`
+            - New version: `v${{ steps.ver.outputs.latest }}`
+            - Upstream release: https://github.com/fatedier/frp/releases/tag/v${{ steps.ver.outputs.latest }}
+            - Release notes: https://github.com/fatedier/frp/releases
+
+            Once CI passes, this PR is merged automatically (squash). Merging
+            publishes `edge`, `v${{ steps.ver.outputs.latest }}` and `latest` images.
+
+      # Requires "Allow auto-merge" enabled in repo settings and a branch
+      # protection rule on main requiring the CI status check to pass.
+      - name: Enable auto-merge
+        if: steps.cpr.outputs.pull-request-created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PR_BOT_TOKEN }}
+        run: gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-url }}"

@@ -14,7 +14,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Resolve latest and current frp versions
         id: ver
@@ -38,7 +38,7 @@ jobs:
       - name: Create Pull Request
         id: cpr
         if: steps.ver.outputs.latest != steps.ver.outputs.current
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.PR_BOT_TOKEN || github.token }}
           commit-message: "chore: update frp to v${{ steps.ver.outputs.latest }}"
@@ -58,8 +58,17 @@ jobs:
 
       # Requires "Allow auto-merge" enabled in repo settings and a branch
       # protection rule on main requiring the CI status check to pass.
+      # Note: in create-pull-request v8, pull-request-created is true only for
+      # brand-new PRs, so gate on pull-request-number (set whenever a PR exists)
+      # and check current state to stay idempotent across repeated runs.
       - name: Enable auto-merge
-        if: steps.cpr.outputs.pull-request-created == 'true'
+        if: steps.cpr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ secrets.PR_BOT_TOKEN }}
-        run: gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-url }}"
+        run: |
+          ENABLED=$(gh pr view "${{ steps.cpr.outputs.pull-request-number }}" --json autoMergeRequest -q '.autoMergeRequest != null')
+          if [ "$ENABLED" = "true" ]; then
+            echo "Auto-merge already enabled for PR #${{ steps.cpr.outputs.pull-request-number }}"
+          else
+            gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-url }}"
+          fi
